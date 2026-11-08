@@ -1,0 +1,16 @@
+{
+  "name": "hexa-ai-lab-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HEXA AI Lab Lightweight Node.js API Backend for Google Colab Integration",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "tsc && node dist/test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+

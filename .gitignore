@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
+
+# Environment & Secrets (NEVER commit)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+.colab-credentials.enc
+**/.colab-credentials.enc
+*.secret
+**/*.secret
+*.pem
+*.key
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
