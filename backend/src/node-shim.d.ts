@@ -47,7 +47,7 @@ declare module "crypto" {
     password: string | Buffer,
     salt: Buffer,
     keylen: number,
-    options?: { N?: number; r?: number; p?: number }
+    options?: { N?: number; r?: number; p?: number; maxmem?: number }
   ): Buffer;
   export function createCipheriv(algorithm: "aes-256-gcm", key: Buffer, iv: Buffer): CipherGCM;
   export function createDecipheriv(algorithm: "aes-256-gcm", key: Buffer, iv: Buffer): DecipherGCM;
@@ -68,10 +68,10 @@ declare module "fs" {
   export function readFileSync(path: string, encoding: BufferEncoding): string;
   export function writeFileSync(
     path: string,
-    data: string,
+    data: string | Buffer,
     options?: { encoding?: BufferEncoding; mode?: number }
   ): void;
-  export function statSync(path: string): { isFile(): boolean };
+  export function statSync(path: string): { isFile(): boolean; mode: number };
   export function unlinkSync(path: string): void;
   const fsDefault: {
     existsSync: typeof existsSync;

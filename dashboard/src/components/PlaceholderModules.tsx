@@ -289,7 +289,7 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
                 <td>
                   <strong>Credential &amp; Session Encryption</strong>
                 </td>
-                <td className="font-mono">AES-256-GCM + Salted $2b$12$ Password Hashes</td>
+                <td className="font-mono">AES-256-GCM + Salted scrypt (N=16384, r=8, p=1) Hashes</td>
               </tr>
               <tr>
                 <td>

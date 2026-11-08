@@ -17,9 +17,12 @@ import {
 } from "./colab/oauth";
 import { ColabRestApiClient, runNonDestructiveVerification } from "./colab/client";
 import {
+  SCRYPT_PARAMS,
   hashPassword,
   verifyPassword,
   validatePasswordStrength,
+  needsPasswordRehash,
+  createLegacyPrefixedHashForTest,
 } from "./auth/password";
 import {
   ensureBootstrapAdmin,
@@ -29,6 +32,8 @@ import {
   resetUserPassword,
   authenticateUserSession,
   validateSessionToken,
+  setLegacyHashForUserTest,
+  userHasCanonicalScryptHash,
 } from "./auth/users";
 import {
   listInfrastructure,
@@ -59,9 +64,26 @@ async function runTests(): Promise<void> {
   const bootstrapSecretFile = path.resolve(process.cwd(), ".bootstrap_admin.secret");
   const masterKeyFile = path.resolve(process.cwd(), ".master_key.secret");
 
-  // Clean test state before starting
-  for (const f of [storeFile, usersFile, sessionsFile, infraFile, bootstrapSecretFile, masterKeyFile]) {
-    if (fs.existsSync(f)) fs.unlinkSync(f);
+  const stateFiles = [
+    storeFile,
+    usersFile,
+    sessionsFile,
+    infraFile,
+    bootstrapSecretFile,
+    masterKeyFile,
+  ];
+  const backups = new Map<string, { data: Buffer; mode: number }>();
+
+  // Preserve any existing runtime state before running isolated test suite
+  for (const f of stateFiles) {
+    if (fs.existsSync(f)) {
+      const stat = fs.statSync(f);
+      backups.set(f, {
+        data: fs.readFileSync(f),
+        mode: stat.mode & 0o777,
+      });
+      fs.unlinkSync(f);
+    }
   }
 
   // 1. Test AES-256-GCM encryption & masking
@@ -169,22 +191,81 @@ async function runTests(): Promise<void> {
   assert.ok(verification.runtimeSpecs.length >= 4, "Must return runtime specifications");
   console.log("[PASS] 5. Non-Destructive Mocked Connection Verification");
 
-  // 6. Test Salted Password Hashing & Strength Policy
+  // 6. Test Salted Password Hashing ($scrypt$ln=14,r=8,p=1$), Malformed Rejection & Legacy Compatibility
+  assert.strictEqual(SCRYPT_PARAMS.algorithm, "scrypt");
+  assert.strictEqual(SCRYPT_PARAMS.N, 16384);
+  assert.strictEqual(SCRYPT_PARAMS.r, 8);
+  assert.strictEqual(SCRYPT_PARAMS.p, 1);
+  assert.strictEqual(SCRYPT_PARAMS.saltBytes, 16);
+  assert.strictEqual(SCRYPT_PARAMS.keyLen, 64);
+
   assert.strictEqual(validatePasswordStrength("short").valid, false);
   assert.strictEqual(validatePasswordStrength("StrongPass!2026").valid, true);
+
   const pwHash1 = hashPassword("StrongPass!2026");
   const pwHash2 = hashPassword("StrongPass!2026");
-  assert.ok(pwHash1.startsWith("$2b$12$"), "Hash must use salted $2b$12$ format");
-  assert.notStrictEqual(pwHash1, pwHash2, "Unique salts must produce distinct hashes");
+  assert.ok(
+    pwHash1.startsWith("$scrypt$ln=14,r=8,p=1$"),
+    "Hash must use genuine PHC $scrypt$ln=14,r=8,p=1$ format"
+  );
+  assert.ok(
+    !pwHash1.startsWith("$2b$"),
+    "scrypt output must never be labeled as bcrypt ($2b$)"
+  );
+  assert.notStrictEqual(pwHash1, pwHash2, "Unique CSPRNG salts must produce distinct hashes");
   assert.strictEqual(verifyPassword("StrongPass!2026", pwHash1), true);
   assert.strictEqual(verifyPassword("WrongPassword!2026", pwHash1), false);
-  console.log("[PASS] 6. Salted Password Hashing ($2b$12$) & Strength Validation");
+  assert.strictEqual(needsPasswordRehash(pwHash1), false);
 
-  // 7. Test Admin Bootstrap, User Management, Session Rotation & Deactivation Guard
+  // Malformed or unsupported hash formats must be safely rejected
+  const malformedHashes = [
+    "",
+    "plaintext",
+    "$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2g",
+    "$scrypt$ln=99,r=8,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "$scrypt$ln=14,r=8,p=1$not_valid_base64!$not_valid_base64!",
+    "$scrypt$ln=14,r=8,p=1$c2hvcnQ$c2hvcnQ",
+    "$2b$12$malformed_short",
+  ];
+  for (const badHash of malformedHashes) {
+    assert.strictEqual(
+      verifyPassword("StrongPass!2026", badHash),
+      false,
+      "Malformed hash format must be rejected safely"
+    );
+  }
+
+  // Backward compatibility with legacy pre-migration records
+  const legacyHash = createLegacyPrefixedHashForTest("LegacyPass#2026", 12);
+  assert.strictEqual(
+    verifyPassword("LegacyPass#2026", legacyHash),
+    true,
+    "Existing pre-migration account hash must remain verifiable"
+  );
+  assert.strictEqual(
+    verifyPassword("WrongLegacyPass#2026", legacyHash),
+    false,
+    "Incorrect password against legacy hash must be rejected"
+  );
+  assert.strictEqual(
+    needsPasswordRehash(legacyHash),
+    true,
+    "Legacy hash must be flagged for transparent rehash upgrade"
+  );
+  console.log(
+    "[PASS] 6. Salted scrypt Password Hashing ($scrypt$ln=14,r=8,p=1$), Malformed Rejection & Legacy Compatibility"
+  );
+
+  // 7. Test Admin Bootstrap, User Management, Legacy Account Migration, Session Rotation & Deactivation Guard
   ensureBootstrapAdmin();
   const initialUsers = listUsers();
   assert.strictEqual(initialUsers.length, 1, "Bootstrap must create exactly 1 initial Admin");
   assert.strictEqual(initialUsers[0].role, "Admin");
+  assert.strictEqual(
+    userHasCanonicalScryptHash(initialUsers[0].id),
+    true,
+    "Bootstrap Admin must use canonical $scrypt$ln=14,r=8,p=1$ hash"
+  );
 
   // Calling ensureBootstrapAdmin again must NOT overwrite or duplicate admin
   ensureBootstrapAdmin();
@@ -198,10 +279,25 @@ async function runTests(): Promise<void> {
   });
   assert.strictEqual(mlUser.role, "ML Engineer");
   assert.strictEqual(mlUser.active, true);
+  assert.strictEqual(userHasCanonicalScryptHash(mlUser.id), true);
+
+  // Simulate an existing pre-migration user account and verify transparent upgrade on login
+  const legacyUserHash = createLegacyPrefixedHashForTest("EngineerPassword#2026", 12);
+  setLegacyHashForUserTest(mlUser.id, legacyUserHash);
+  assert.strictEqual(
+    userHasCanonicalScryptHash(mlUser.id),
+    false,
+    "Pre-migration user hash must initially be detected as legacy"
+  );
 
   const auth1 = authenticateUserSession("ml_engineer_1", "EngineerPassword#2026");
   assert.ok(auth1.session.sessionId.length === 64);
   assert.ok(validateSessionToken(auth1.session.sessionId) !== null);
+  assert.strictEqual(
+    userHasCanonicalScryptHash(mlUser.id),
+    true,
+    "Login must transparently migrate legacy account hash to canonical $scrypt$ln=14,r=8,p=1$ format"
+  );
 
   // Session rotation on re-login must invalidate previous session ID
   const auth2 = authenticateUserSession(
@@ -226,15 +322,18 @@ async function runTests(): Promise<void> {
     "Deactivated user must not be able to log in"
   );
 
-  // Re-activate and test password reset
+  // Re-activate and test password reset + subsequent login
   updateUser(mlUser.id, { active: true });
   resetUserPassword(mlUser.id, "NewEngineerPass$99");
+  assert.strictEqual(userHasCanonicalScryptHash(mlUser.id), true);
   assert.throws(() =>
     authenticateUserSession("ml_engineer_1", "EngineerPassword#2026")
   );
   const authAfterReset = authenticateUserSession("ml_engineer_1", "NewEngineerPass$99");
   assert.strictEqual(authAfterReset.user.username, "ml_engineer_1");
-  console.log("[PASS] 7. Bootstrap Admin, User Management, Session Rotation & Deactivation");
+  console.log(
+    "[PASS] 7. Bootstrap Admin, User Management, Legacy Account Migration, Session Rotation & Deactivation"
+  );
 
   // 8. Test Infrastructure Inventory Persistence, Manual Status & Secret Rejection
   const gpuNode = createInfrastructure({
@@ -433,10 +532,18 @@ async function runTests(): Promise<void> {
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearStoredTokens();
-    for (const f of [storeFile, usersFile, sessionsFile, infraFile, bootstrapSecretFile, masterKeyFile]) {
+    for (const f of stateFiles) {
       if (fs.existsSync(f)) {
         fs.unlinkSync(f);
       }
+      const backup = backups.get(f);
+      if (backup) {
+        fs.writeFileSync(f, backup.data, { mode: backup.mode });
+      }
+    }
+    // Ensure any restored pre-existing bootstrap admin account is transparently migrated
+    if (backups.has(usersFile) && backups.has(bootstrapSecretFile)) {
+      ensureBootstrapAdmin();
     }
   }
 

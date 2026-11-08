@@ -277,7 +277,7 @@ export const UserManagementModule: React.FC<UserManagementModuleProps> = ({
             <div>
               <h2 className="section-title">Create User Account</h2>
               <p className="section-subtitle">
-                Passwords are salted and hashed with $2b$12$ on the backend.
+                Passwords are salted and hashed with scrypt (N=16384, r=8, p=1) on the backend.
               </p>
             </div>
             <span className="status-badge badge-teal">Admin Only</span>

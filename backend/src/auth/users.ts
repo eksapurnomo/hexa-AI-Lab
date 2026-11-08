@@ -2,7 +2,14 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { encryptSecret, decryptSecret } from "../colab/crypto";
-import { hashPassword, verifyPassword, validatePasswordStrength } from "./password";
+import {
+  hashPassword,
+  verifyPassword,
+  validatePasswordStrength,
+  needsPasswordRehash,
+} from "./password";
+
+const DUMMY_TIMING_SCRYPT_HASH = hashPassword("DummyTimingMitigationPassword!2026");
 
 export type UserRole =
   | "Admin"
@@ -179,8 +186,22 @@ function resolveBootstrapAdminCredentials(): {
  */
 export function ensureBootstrapAdmin(): void {
   const existingUsers = loadUsersRaw();
-  const hasAdmin = existingUsers.some((u) => u.role === "Admin");
-  if (hasAdmin) {
+  const adminIdx = existingUsers.findIndex((u) => u.role === "Admin");
+  if (adminIdx !== -1) {
+    // If existing bootstrap admin still uses a pre-migration legacy hash and matches
+    // the local bootstrap credential, transparently upgrade the hash format in place
+    // without losing the user record or forcing a password reset.
+    const existingAdmin = existingUsers[adminIdx];
+    if (needsPasswordRehash(existingAdmin.passwordHash)) {
+      const creds = resolveBootstrapAdminCredentials();
+      if (creds && verifyPassword(creds.password, existingAdmin.passwordHash)) {
+        existingUsers[adminIdx] = {
+          ...existingAdmin,
+          passwordHash: hashPassword(creds.password),
+        };
+        saveUsersRaw(existingUsers);
+      }
+    }
     return;
   }
 
@@ -388,11 +409,8 @@ export function authenticateUserSession(
     (u) => u.username.toLowerCase() === username.toLowerCase()
   );
   if (idx === -1) {
-    // Perform dummy verification to mitigate timing enumeration
-    verifyPassword(
-      passwordInput,
-      "$2b$12$......................1234567890123456789012345678901"
-    );
+    // Perform genuine scrypt dummy verification to mitigate timing enumeration
+    verifyPassword(passwordInput, DUMMY_TIMING_SCRYPT_HASH);
     throw new Error("Invalid username or password.");
   }
 
@@ -407,8 +425,13 @@ export function authenticateUserSession(
   }
 
   const nowIso = new Date().toISOString();
+  const upgradedHash = needsPasswordRehash(user.passwordHash)
+    ? hashPassword(passwordInput)
+    : user.passwordHash;
+
   users[idx] = {
     ...user,
+    passwordHash: upgradedHash,
     lastLoginAt: nowIso,
   };
   saveUsersRaw(users);
@@ -471,4 +494,25 @@ export function invalidateUserSessions(userId: string): void {
   const sessions = loadSessionsRaw().filter((s) => s.userId !== userId);
   saveSessionsRaw(sessions);
 }
+
+export function setLegacyHashForUserTest(userId: string, legacyHash: string): void {
+  const users = loadUsersRaw();
+  const idx = users.findIndex((u) => u.id === userId);
+  if (idx === -1) {
+    throw new Error("User not found.");
+  }
+  users[idx] = {
+    ...users[idx],
+    passwordHash: legacyHash,
+  };
+  saveUsersRaw(users);
+}
+
+export function userHasCanonicalScryptHash(userId: string): boolean {
+  const users = loadUsersRaw();
+  const user = users.find((u) => u.id === userId);
+  if (!user) return false;
+  return !needsPasswordRehash(user.passwordHash);
+}
+
 
