@@ -30,6 +30,11 @@ function resolveMasterSecret(): string {
     console.warn("[Security] Generating ephemeral master encryption secret. Instance-isolated!");
     loggedEphemeralWarning = true;
   }
+  try {
+    fs.writeFileSync(secretFilePath, EPHEMERAL_MASTER_KEY, { encoding: "utf8", mode: 0o600 });
+  } catch {
+    // Fallback to in-memory if directory is read-only
+  }
   return EPHEMERAL_MASTER_KEY;
 }
 

@@ -27,10 +27,17 @@ execSync(
   { cwd: rootDir, stdio: "inherit" }
 );
 
-// 3. Copy static brand logo and CSS
-const logoSrc = path.join(rootDir, "public", "brand", "inexa-teal-logo.png");
-if (fs.existsSync(logoSrc)) {
-  fs.copyFileSync(logoSrc, path.join(distDir, "brand", "inexa-teal-logo.png"));
+// 3. Copy static brand logos and CSS
+const brandSrcDir = path.join(rootDir, "public", "brand");
+if (fs.existsSync(brandSrcDir)) {
+  for (const file of fs.readdirSync(brandSrcDir)) {
+    if (file.endsWith(".png")) {
+      fs.copyFileSync(
+        path.join(brandSrcDir, file),
+        path.join(distDir, "brand", file)
+      );
+    }
+  }
 }
 
 const cssSrc = path.join(rootDir, "src", "styles", "dashboard.css");
@@ -44,6 +51,9 @@ const moduleFiles = [
   ["./components/OverviewModule", path.join(cjsOutDir, "components", "OverviewModule.js")],
   ["./components/UnslothTrainingModule", path.join(cjsOutDir, "components", "UnslothTrainingModule.js")],
   ["./components/GoogleColabSettings", path.join(cjsOutDir, "components", "GoogleColabSettings.js")],
+  ["./components/LoginScreen", path.join(cjsOutDir, "components", "LoginScreen.js")],
+  ["./components/UserManagementModule", path.join(cjsOutDir, "components", "UserManagementModule.js")],
+  ["./components/InfrastructureModule", path.join(cjsOutDir, "components", "InfrastructureModule.js")],
   ["./components/PlaceholderModules", path.join(cjsOutDir, "components", "PlaceholderModules.js")],
   ["./App", path.join(cjsOutDir, "App.js")],
 ];
@@ -52,8 +62,9 @@ let bundleJs = `(function() {
   "use strict";
 
   // Lightweight DOM-safe React runtime (uses createElement, setAttribute, textContent only)
-  let hooksState = [];
-  let hooksIndex = 0;
+  const hooksState = {};
+  let currentCompKey = "Root";
+  let currentHookIdx = 0;
   let rootRenderFn = null;
 
   function scheduleRerender() {
@@ -64,26 +75,26 @@ let bundleJs = `(function() {
 
   const React = {
     useState: function(initialValue) {
-      const idx = hooksIndex++;
-      if (hooksState[idx] === undefined) {
-        hooksState[idx] = typeof initialValue === "function" ? initialValue() : initialValue;
+      const key = currentCompKey + ":" + (currentHookIdx++);
+      if (!(key in hooksState)) {
+        hooksState[key] = typeof initialValue === "function" ? initialValue() : initialValue;
       }
       const setState = function(nextValue) {
-        const resolved = typeof nextValue === "function" ? nextValue(hooksState[idx]) : nextValue;
-        if (hooksState[idx] !== resolved) {
-          hooksState[idx] = resolved;
+        const resolved = typeof nextValue === "function" ? nextValue(hooksState[key]) : nextValue;
+        if (hooksState[key] !== resolved) {
+          hooksState[key] = resolved;
           scheduleRerender();
         }
       };
-      return [hooksState[idx], setState];
+      return [hooksState[key], setState];
     },
     useCallback: function(fn) {
       return fn;
     },
     useEffect: function(effectFn) {
-      const idx = hooksIndex++;
-      if (!hooksState[idx]) {
-        hooksState[idx] = true;
+      const key = currentCompKey + ":effect:" + (currentHookIdx++);
+      if (!hooksState[key]) {
+        hooksState[key] = true;
         setTimeout(function() {
           effectFn();
         }, 0);
@@ -113,7 +124,14 @@ let bundleJs = `(function() {
       return document.createTextNode(String(vnode));
     }
     if (typeof vnode.type === "function") {
-      return renderVNode(vnode.type(vnode.props || {}));
+      const prevComp = currentCompKey;
+      const prevIdx = currentHookIdx;
+      currentCompKey = vnode.type.name || "Component";
+      currentHookIdx = 0;
+      const out = renderVNode(vnode.type(vnode.props || {}));
+      currentCompKey = prevComp;
+      currentHookIdx = prevIdx;
+      return out;
     }
     const el = document.createElement(String(vnode.type));
     const props = vnode.props || {};
@@ -180,10 +198,9 @@ bundleJs += `
     const AppComp = AppMod.App || AppMod.default;
 
     rootRenderFn = function() {
-      hooksIndex = 0;
+      currentCompKey = "Root";
+      currentHookIdx = 0;
       const tree = React.createElement(AppComp, {
-        adminToken: "demo-local-preview",
-        csrfToken: "demo-csrf-token",
         initialModule: initialMod
       });
       const domNode = renderVNode(tree);
@@ -210,8 +227,8 @@ const indexHtml = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:3001; object-src 'none';" />
-  <title>HEXA AI Lab — Fine-Tuning &amp; Compute Studio</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:3001 http://localhost:3001 http://127.0.0.1:4173 http://localhost:4173; object-src 'none';" />
+  <title>inexa.space — HEXA AI Lab</title>
   <link rel="stylesheet" href="/styles/dashboard.css" />
 </head>
 <body>

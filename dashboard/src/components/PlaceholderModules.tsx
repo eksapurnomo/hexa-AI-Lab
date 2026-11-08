@@ -20,7 +20,7 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
             <span className="module-eyebrow">Data Pipeline</span>
             <h1 className="module-title">Dataset Management</h1>
             <p className="module-subtitle">
-              Prepare, validate, and format instruction datasets for Unsloth QLoRA fine-tuning.
+              Prepare, validate, and format instruction datasets for QLoRA fine-tuning.
             </p>
           </div>
           <span className="status-badge badge-neutral">Backend Integration Pending</span>
@@ -85,14 +85,14 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
               <strong>0 Datasets Loaded</strong>
               <p>
                 Connect the dataset storage backend or specify a manual dataset path inside your
-                Unsloth Colab notebook.
+                Colab notebook.
               </p>
               <button
                 type="button"
                 className="btn-outline-sm"
                 onClick={() => onNavigate("unsloth")}
               >
-                Go to Unsloth Configuration &rarr;
+                Go to Training Configuration &rarr;
               </button>
             </div>
           </div>
@@ -132,7 +132,7 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
               className="btn-secondary"
               onClick={() => onNavigate("unsloth")}
             >
-              Configure Unsloth Spec
+              Training Configuration
             </button>
           </div>
 
@@ -242,71 +242,6 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
     );
   }
 
-  if (moduleId === "team") {
-    return (
-      <div className="module-container">
-        <header className="module-header">
-          <div>
-            <span className="module-eyebrow">Access Control</span>
-            <h1 className="module-title">Team Management</h1>
-            <p className="module-subtitle">
-              Role-based access control (RBAC) for administrators, ML engineers, and reviewers.
-            </p>
-          </div>
-          <span className="status-badge badge-teal">Single-Admin Guard Active</span>
-        </header>
-
-        <div className="info-callout">
-          <strong>Honest Status Notice:</strong> Multi-user directory persistence is not yet
-          connected. API access is currently protected by the server-side Administrator Token (
-          <code>X-Hexa-Admin-Token</code>) and CSRF middleware.
-        </div>
-
-        <div className="hexa-card">
-          <h2 className="section-title">Configured Security Roles</h2>
-          <table className="hexa-table">
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th>Permissions</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <strong>Workspace Administrator</strong>
-                </td>
-                <td>Full access to Colab credentials, encryption store, and Unsloth specs</td>
-                <td>
-                  <span className="status-badge badge-teal">Enforced via Admin Token</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>ML Engineer</strong>
-                </td>
-                <td>Dataset preparation, Unsloth configuration, and evaluation review</td>
-                <td>
-                  <span className="status-badge badge-neutral">Placeholder Ready</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>Auditor / Viewer</strong>
-                </td>
-                <td>Read-only access to benchmark reports and model registry metadata</td>
-                <td>
-                  <span className="status-badge badge-neutral">Placeholder Ready</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
   // Default: "settings"
   return (
     <div className="module-container">
@@ -352,15 +287,15 @@ export const PlaceholderModuleView: React.FC<PlaceholderModuleProps> = ({
               </tr>
               <tr>
                 <td>
-                  <strong>Credential Encryption</strong>
+                  <strong>Credential &amp; Session Encryption</strong>
                 </td>
-                <td className="font-mono">AES-256-GCM (scrypt key derivation)</td>
+                <td className="font-mono">AES-256-GCM + Salted $2b$12$ Password Hashes</td>
               </tr>
               <tr>
                 <td>
                   <strong>Backend Bind Address</strong>
                 </td>
-                <td className="font-mono">127.0.0.1:3001 (Loopback Only)</td>
+                <td className="font-mono">127.0.0.1:4173 &amp; 127.0.0.1:3001 (Loopback Only)</td>
               </tr>
               <tr>
                 <td>

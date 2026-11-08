@@ -58,17 +58,17 @@ export const UnslothTrainingModule: React.FC<UnslothTrainingModuleProps> = ({
 
   const handleResetDefaults = () => {
     onUpdateConfig({ ...DEFAULT_UNSLOTH_CONFIG });
-    setSavedNotice("Unsloth configuration restored to recommended defaults.");
+    setSavedNotice("Training configuration restored to recommended defaults.");
   };
 
   const handleApplyPreset = (e: React.FormEvent) => {
     e.preventDefault();
     setSavedNotice(
-      "Unsloth QLoRA configuration applied. Ready for Manual Colab notebook execution."
+      "Training configuration applied. Ready for Manual Colab notebook execution."
     );
   };
 
-  const generatedPythonSnippet = `# HEXA AI Lab — Unsloth QLoRA Fine-Tuning Configuration (Manual Colab Mode)
+  const generatedPythonSnippet = `# HEXA AI Lab — QLoRA Fine-Tuning Specification (Manual Colab Mode)
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
 from transformers import TrainingArguments
@@ -106,10 +106,10 @@ training_args = TrainingArguments(
     <div className="module-container">
       <div className="module-header">
         <div>
-          <span className="module-eyebrow">Fine-Tuning Engine</span>
-          <h1 className="module-title">Training &amp; Unsloth Configuration</h1>
+          <span className="module-eyebrow">HEXA Training Studio</span>
+          <h1 className="module-title">Model Training &amp; Training Configuration</h1>
           <p className="module-subtitle">
-            Configure memory-efficient 4-bit QLoRA parameters and export ready-to-run Unsloth
+            Configure memory-efficient 4-bit QLoRA parameters and export ready-to-run training
             specifications for Manual Colab Mode.
           </p>
         </div>
@@ -132,7 +132,7 @@ training_args = TrainingArguments(
             <div>
               <h2 className="section-title">1. Base Model &amp; Quantization</h2>
               <p className="section-subtitle">
-                Select pre-quantized 4-bit Unsloth models optimized for T4, L4, and A100 GPUs.
+                Select pre-quantized 4-bit foundation models optimized for T4, L4, and A100 GPUs.
               </p>
             </div>
             <span className="status-badge badge-teal">QLoRA 4-Bit</span>
@@ -140,9 +140,9 @@ training_args = TrainingArguments(
 
           <div className="form-grid">
             <div className="form-field full-width">
-              <label htmlFor="unsloth-base-model">Base Model Identifier</label>
+              <label htmlFor="training-base-model">Base Model Identifier</label>
               <select
-                id="unsloth-base-model"
+                id="training-base-model"
                 value={config.baseModel}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange("baseModel", e.target.value)
@@ -157,9 +157,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-seq-len">Max Sequence Length</label>
+              <label htmlFor="training-seq-len">Max Sequence Length</label>
               <select
-                id="unsloth-seq-len"
+                id="training-seq-len"
                 value={String(config.maxSeqLength)}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange("maxSeqLength", Number(e.target.value))
@@ -173,9 +173,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-dtype">Compute Precision (dtype)</label>
+              <label htmlFor="training-dtype">Compute Precision (dtype)</label>
               <select
-                id="unsloth-dtype"
+                id="training-dtype"
                 value={config.dtype}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange(
@@ -197,16 +197,16 @@ training_args = TrainingArguments(
             <div>
               <h2 className="section-title">2. LoRA Adapter Architecture</h2>
               <p className="section-subtitle">
-                Configure low-rank matrices and Unsloth gradient checkpointing.
+                Configure low-rank matrices and memory-efficient gradient checkpointing.
               </p>
             </div>
           </div>
 
           <div className="form-grid">
             <div className="form-field">
-              <label htmlFor="unsloth-lora-r">LoRA Rank (r)</label>
+              <label htmlFor="training-lora-r">LoRA Rank (r)</label>
               <select
-                id="unsloth-lora-r"
+                id="training-lora-r"
                 value={String(config.loraRank)}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange("loraRank", Number(e.target.value))
@@ -220,9 +220,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-lora-alpha">LoRA Alpha</label>
+              <label htmlFor="training-lora-alpha">LoRA Alpha</label>
               <select
-                id="unsloth-lora-alpha"
+                id="training-lora-alpha"
                 value={String(config.loraAlpha)}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange("loraAlpha", Number(e.target.value))
@@ -268,9 +268,9 @@ training_args = TrainingArguments(
 
           <div className="form-grid">
             <div className="form-field">
-              <label htmlFor="unsloth-batch-size">Per-Device Batch Size</label>
+              <label htmlFor="training-batch-size">Per-Device Batch Size</label>
               <input
-                id="unsloth-batch-size"
+                id="training-batch-size"
                 type="number"
                 min={1}
                 max={32}
@@ -282,9 +282,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-grad-accum">Gradient Accumulation Steps</label>
+              <label htmlFor="training-grad-accum">Gradient Accumulation Steps</label>
               <input
-                id="unsloth-grad-accum"
+                id="training-grad-accum"
                 type="number"
                 min={1}
                 max={64}
@@ -296,9 +296,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-lr">Learning Rate</label>
+              <label htmlFor="training-lr">Learning Rate</label>
               <input
-                id="unsloth-lr"
+                id="training-lr"
                 type="text"
                 value={config.learningRate}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -308,9 +308,9 @@ training_args = TrainingArguments(
             </div>
 
             <div className="form-field">
-              <label htmlFor="unsloth-export-format">Target Export Format</label>
+              <label htmlFor="training-export-format">Target Export Format</label>
               <select
-                id="unsloth-export-format"
+                id="training-export-format"
                 value={config.outputExportFormat}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleFieldChange(
@@ -328,7 +328,7 @@ training_args = TrainingArguments(
 
           <div className="form-footer">
             <button type="submit" className="btn-primary">
-              Save Unsloth Configuration
+              Save Training Configuration
             </button>
           </div>
         </form>
@@ -336,7 +336,7 @@ training_args = TrainingArguments(
         <div className="hexa-card code-preview-card">
           <div className="section-header-row">
             <div>
-              <h2 className="section-title">Generated Unsloth Specification</h2>
+              <h2 className="section-title">Training Script Preview</h2>
               <p className="section-subtitle">
                 Synchronized Python specification for Manual Colab execution.
               </p>

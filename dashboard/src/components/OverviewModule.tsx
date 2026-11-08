@@ -36,7 +36,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     },
     {
       step: "Stage 02",
-      title: "Unsloth QLoRA Configuration",
+      title: "Training Configuration",
       status: "Configured",
       badgeClass: "badge-teal",
       description: `Base model: ${unslothConfig.baseModel} (LoRA r=${unslothConfig.loraRank}, alpha=${unslothConfig.loraAlpha}, 4-bit=${unslothConfig.loadIn4Bit ? "Enabled" : "Disabled"}).`,
@@ -75,11 +75,11 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     <div className="module-container">
       <div className="module-header">
         <div>
-          <span className="module-eyebrow">Workspace Summary</span>
+          <span className="module-eyebrow">inexa.space — Workspace Summary</span>
           <h1 className="module-title">HEXA AI Lab Overview</h1>
           <p className="module-subtitle">
-            Centralized control plane for Unsloth QLoRA fine-tuning, dataset preparation, and Google
-            Colab compute orchestration.
+            Centralized control plane for QLoRA fine-tuning, dataset preparation, infrastructure
+            inventory, and Google Colab compute orchestration.
           </p>
         </div>
         <div className="header-actions">
@@ -88,7 +88,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             className="btn-secondary"
             onClick={() => onNavigate("unsloth")}
           >
-            Configure Unsloth
+            Training Configuration
           </button>
           <button
             type="button"
@@ -128,8 +128,8 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           </div>
           <div className="card-metric">Idle Queue</div>
           <p className="card-description">
-            No automated training job is currently executing. Unsloth config is ready for Manual
-            Colab execution.
+            No automated training job is currently executing. Training configuration is ready for
+            Manual Colab execution.
           </p>
           <button
             type="button"
@@ -185,7 +185,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           <div>
             <h2 className="section-title">Development Pipeline</h2>
             <p className="section-subtitle">
-              End-to-end workflow status across dataset preparation, Unsloth fine-tuning, and Colab
+              End-to-end workflow status across dataset preparation, HEXA Training Studio, and Colab
               runtime execution.
             </p>
           </div>

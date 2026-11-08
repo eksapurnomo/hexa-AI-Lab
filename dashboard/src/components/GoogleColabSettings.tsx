@@ -9,7 +9,7 @@ export interface GoogleColabSettingsProps {
 }
 
 export const GoogleColabSettings: React.FC<GoogleColabSettingsProps> = ({
-  apiBaseUrl = "http://127.0.0.1:3001",
+  apiBaseUrl = "",
   adminToken,
   csrfToken,
   onStatusUpdate,
@@ -35,6 +35,7 @@ export const GoogleColabSettings: React.FC<GoogleColabSettingsProps> = ({
     try {
       const res = await fetch(`${apiBaseUrl}/api/integrations/google/status`, {
         method: "GET",
+        credentials: "include",
         headers: {
           "X-Hexa-Admin-Token": adminToken,
           Accept: "application/json",
@@ -78,6 +79,7 @@ export const GoogleColabSettings: React.FC<GoogleColabSettingsProps> = ({
 
       const res = await fetch(`${apiBaseUrl}/api/integrations/google/config`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-Hexa-Admin-Token": adminToken,
@@ -111,6 +113,7 @@ export const GoogleColabSettings: React.FC<GoogleColabSettingsProps> = ({
     try {
       const res = await fetch(`${apiBaseUrl}/api/integrations/google/test-connection`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-Hexa-Admin-Token": adminToken,

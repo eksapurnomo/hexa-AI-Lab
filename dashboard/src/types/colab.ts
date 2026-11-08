@@ -6,14 +6,80 @@ export type DashboardModuleId =
   | "evaluation"
   | "models"
   | "colab"
+  | "infrastructure"
   | "team"
   | "settings";
+
+export type UserRole =
+  | "Admin"
+  | "ML Engineer"
+  | "Dataset Contributor"
+  | "Reviewer";
+
+export interface AuthenticatedUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  active: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export type InfrastructureType =
+  | "Local Server"
+  | "VPS"
+  | "Cloud Server"
+  | "GPU Server"
+  | "Dedicated Server"
+  | "Compute Node"
+  | "Other";
+
+export type InfrastructureEnvironment = "Development" | "Staging" | "Production";
+
+export type InfrastructureStatus =
+  | "Registered"
+  | "Online"
+  | "Offline"
+  | "Maintenance";
+
+export interface InfrastructureRecord {
+  id: string;
+  name: string;
+  type: InfrastructureType;
+  provider: string;
+  environment: InfrastructureEnvironment;
+  hostnameOrIp: string;
+  operatingSystem: string;
+  cpuSpecs: string;
+  ramCapacity: string;
+  gpuModel: string;
+  gpuVram: string;
+  storageCapacity: string;
+  region: string;
+  purpose: string;
+  status: InfrastructureStatus;
+  active: boolean;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InfrastructureSummary {
+  totalRegistered: number;
+  onlineCount: number;
+  offlineCount: number;
+  gpuEnabledCount: number;
+  activeComputeCount: number;
+  maintenanceCount: number;
+}
 
 export interface NavItem {
   id: DashboardModuleId;
   label: string;
   category: "Core Workspace" | "ML Pipeline" | "Infrastructure & Admin";
   statusBadge?: string;
+  adminOnly?: boolean;
 }
 
 export interface RuntimeKey {
