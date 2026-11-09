@@ -25,6 +25,7 @@ import {
   createLegacyPrefixedHashForTest,
 } from "./auth/password";
 import {
+  DEFAULT_DEV_ADMIN_PASSWORD,
   ensureBootstrapAdmin,
   listUsers,
   createUser,
@@ -61,18 +62,22 @@ async function runTests(): Promise<void> {
   const usersFile = path.resolve(process.cwd(), ".hexa-users.enc");
   const sessionsFile = path.resolve(process.cwd(), ".hexa-sessions.enc");
   const infraFile = path.resolve(process.cwd(), ".hexa-infrastructure.enc");
-  const bootstrapSecretFile = path.resolve(process.cwd(), ".bootstrap_admin.secret");
   const masterKeyFile = path.resolve(process.cwd(), ".master_key.secret");
+  const obsoleteBootstrapSecret = path.resolve(process.cwd(), ".bootstrap_admin.secret");
 
   const stateFiles = [
     storeFile,
     usersFile,
     sessionsFile,
     infraFile,
-    bootstrapSecretFile,
     masterKeyFile,
   ];
   const backups = new Map<string, { data: Buffer; mode: number }>();
+
+  // Ensure obsolete plaintext bootstrap secret file is removed
+  if (fs.existsSync(obsoleteBootstrapSecret)) {
+    fs.unlinkSync(obsoleteBootstrapSecret);
+  }
 
   // Preserve any existing runtime state before running isolated test suite
   for (const f of stateFiles) {
@@ -256,21 +261,107 @@ async function runTests(): Promise<void> {
     "[PASS] 6. Salted scrypt Password Hashing ($scrypt$ln=14,r=8,p=1$), Malformed Rejection & Legacy Compatibility"
   );
 
-  // 7. Test Admin Bootstrap, User Management, Legacy Account Migration, Session Rotation & Deactivation Guard
-  ensureBootstrapAdmin();
-  const initialUsers = listUsers();
-  assert.strictEqual(initialUsers.length, 1, "Bootstrap must create exactly 1 initial Admin");
-  assert.strictEqual(initialUsers[0].role, "Admin");
+  // 7. Test Admin Provisioning, User Management, Legacy Migration, Session Rotation & Deactivation Guard
+  // 7a. Fresh development bootstrap without environment variable
   assert.strictEqual(
-    userHasCanonicalScryptHash(initialUsers[0].id),
+    fs.existsSync(obsoleteBootstrapSecret),
+    false,
+    "No obsolete .bootstrap_admin.secret file should exist prior to bootstrap"
+  );
+  ensureBootstrapAdmin();
+  const devInitialUsers = listUsers();
+  assert.strictEqual(devInitialUsers.length, 1, "Dev bootstrap must create exactly 1 initial Admin");
+  assert.strictEqual(devInitialUsers[0].role, "Admin");
+  assert.strictEqual(
+    userHasCanonicalScryptHash(devInitialUsers[0].id),
     true,
     "Bootstrap Admin must use canonical $scrypt$ln=14,r=8,p=1$ hash"
   );
+  assert.strictEqual(
+    fs.existsSync(obsoleteBootstrapSecret),
+    false,
+    "No plaintext bootstrap secret file must be written to disk in dev bootstrap"
+  );
+  const devAdminAuth = authenticateUserSession(devInitialUsers[0].username, DEFAULT_DEV_ADMIN_PASSWORD);
+  assert.ok(devAdminAuth.session.sessionId.length === 64);
+  assert.throws(
+    () => authenticateUserSession(devInitialUsers[0].username, "WrongPassword#9999"),
+    /Invalid username or password/
+  );
 
-  // Calling ensureBootstrapAdmin again must NOT overwrite or duplicate admin
+  // 7b. Production bootstrap without environment variable fails safely and clearly
+  if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
+  if (fs.existsSync(sessionsFile)) fs.unlinkSync(sessionsFile);
+  const origNodeEnv = process.env.NODE_ENV;
+  const origAdminPw = process.env.HEXA_ADMIN_INITIAL_PASSWORD;
+  const origLegacyPw = process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD;
+
+  process.env.NODE_ENV = "production";
+  delete process.env.HEXA_ADMIN_INITIAL_PASSWORD;
+  delete process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD;
+
+  assert.throws(
+    () => ensureBootstrapAdmin(),
+    /requires HEXA_ADMIN_INITIAL_PASSWORD in production environment/i,
+    "Production bootstrap without HEXA_ADMIN_INITIAL_PASSWORD must fail safely and clearly"
+  );
+  assert.strictEqual(
+    fs.existsSync(usersFile),
+    false,
+    "No user file must be created when production provisioning fails"
+  );
+  assert.strictEqual(
+    fs.existsSync(obsoleteBootstrapSecret),
+    false,
+    "No plaintext secret must be created on failed production provisioning"
+  );
+
+  // 7c. Production bootstrap with environment variable provisions Admin with canonical scrypt
+  process.env.HEXA_ADMIN_INITIAL_PASSWORD = "StrongProdAdmin#2026";
   ensureBootstrapAdmin();
-  assert.strictEqual(listUsers().length, 1, "Bootstrap must not duplicate existing Admin");
+  const prodInitialUsers = listUsers();
+  assert.strictEqual(prodInitialUsers.length, 1, "Production bootstrap must create exactly 1 Admin");
+  assert.strictEqual(
+    userHasCanonicalScryptHash(prodInitialUsers[0].id),
+    true,
+    "Production Admin must use canonical scrypt hash format"
+  );
+  assert.strictEqual(
+    fs.existsSync(obsoleteBootstrapSecret),
+    false,
+    "No plaintext bootstrap secret file must be written to disk in production"
+  );
+  const prodAuth = authenticateUserSession(prodInitialUsers[0].username, "StrongProdAdmin#2026");
+  assert.strictEqual(prodAuth.user.role, "Admin");
+  assert.throws(
+    () => authenticateUserSession(prodInitialUsers[0].username, "WrongProdPassword#99"),
+    /Invalid username or password/
+  );
 
+  // 7d. Existing Admin account is preserved on subsequent restarts (never overwritten)
+  const originalAdminId = prodInitialUsers[0].id;
+  process.env.HEXA_ADMIN_INITIAL_PASSWORD = "CompletelyDifferentPassword#999";
+  ensureBootstrapAdmin();
+  const recheckedUsers = listUsers();
+  assert.strictEqual(recheckedUsers.length, 1, "Restart must not create duplicate Admin");
+  assert.strictEqual(recheckedUsers[0].id, originalAdminId, "Existing Admin ID must be preserved");
+  const stillValidLogin = authenticateUserSession(recheckedUsers[0].username, "StrongProdAdmin#2026");
+  assert.strictEqual(stillValidLogin.user.id, originalAdminId);
+  assert.throws(
+    () => authenticateUserSession(recheckedUsers[0].username, "CompletelyDifferentPassword#999"),
+    /Invalid username or password/,
+    "Existing Admin password must not be overwritten by subsequent environment changes"
+  );
+
+  // Restore environment variables
+  if (origNodeEnv !== undefined) process.env.NODE_ENV = origNodeEnv;
+  else delete process.env.NODE_ENV;
+  if (origAdminPw !== undefined) process.env.HEXA_ADMIN_INITIAL_PASSWORD = origAdminPw;
+  else delete process.env.HEXA_ADMIN_INITIAL_PASSWORD;
+  if (origLegacyPw !== undefined) process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD = origLegacyPw;
+  else delete process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD;
+
+  // 7e. Create ML Engineer, session rotation, deactivation, and password reset
   const mlUser = createUser({
     username: "ml_engineer_1",
     displayName: "Raka (ML Engineer)",
@@ -332,7 +423,7 @@ async function runTests(): Promise<void> {
   const authAfterReset = authenticateUserSession("ml_engineer_1", "NewEngineerPass$99");
   assert.strictEqual(authAfterReset.user.username, "ml_engineer_1");
   console.log(
-    "[PASS] 7. Bootstrap Admin, User Management, Legacy Account Migration, Session Rotation & Deactivation"
+    "[PASS] 7. Secure Admin Provisioning, User Management, Legacy Migration, Session Rotation & Deactivation"
   );
 
   // 8. Test Infrastructure Inventory Persistence, Manual Status & Secret Rejection
@@ -541,8 +632,8 @@ async function runTests(): Promise<void> {
         fs.writeFileSync(f, backup.data, { mode: backup.mode });
       }
     }
-    // Ensure any restored pre-existing bootstrap admin account is transparently migrated
-    if (backups.has(usersFile) && backups.has(bootstrapSecretFile)) {
+    // Ensure any restored pre-existing bootstrap admin account remains verified
+    if (backups.has(usersFile)) {
       ensureBootstrapAdmin();
     }
   }

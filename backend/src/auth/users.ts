@@ -127,92 +127,90 @@ function saveSessionsRaw(sessions: SessionRecord[]): void {
   fs.writeFileSync(filePath, encrypted, { encoding: "utf8", mode: 0o600 });
 }
 
+export const DEFAULT_DEV_ADMIN_PASSWORD = "HexaLab#DevAdmin2026";
+
 /**
- * Resolves bootstrap administrator credentials using multi-tiered resolution:
- * 1. Environment variables (HEXA_BOOTSTRAP_ADMIN_USERNAME / HEXA_BOOTSTRAP_ADMIN_PASSWORD)
- * 2. Local secret file (.bootstrap_admin.secret)
- * 3. Ephemeral CSPRNG secret persisted to .bootstrap_admin.secret (for local non-prod convenience)
- * Never hardcodes a literal default password in source code.
+ * Resolves initial administrator provisioning credentials:
+ * 1. Environment variables:
+ *    - HEXA_ADMIN_INITIAL_PASSWORD (or legacy HEXA_BOOTSTRAP_ADMIN_PASSWORD)
+ *    - HEXA_ADMIN_INITIAL_USERNAME (or legacy HEXA_BOOTSTRAP_ADMIN_USERNAME, default: "admin")
+ *    - HEXA_ADMIN_INITIAL_DISPLAY_NAME (or legacy HEXA_BOOTSTRAP_ADMIN_DISPLAY_NAME, default: "HEXA Lab Administrator")
+ * 2. In production (NODE_ENV === "production"):
+ *    - Strictly requires HEXA_ADMIN_INITIAL_PASSWORD (min 8 chars) when initial Admin provisioning is necessary.
+ *    - Never uses any hardcoded, default, or fallback password in production.
+ * 3. In non-production development mode:
+ *    - Uses HEXA_ADMIN_INITIAL_PASSWORD if provided, or the development-only fallback DEFAULT_DEV_ADMIN_PASSWORD.
+ *
+ * Plaintext passwords are NEVER written to a file, disk, log, API response, or frontend.
  */
-function resolveBootstrapAdminCredentials(): {
+function resolveInitialAdminCredentials(): {
   username: string;
   password: string;
   displayName: string;
-} | null {
+} {
   const username = (
-    process.env.HEXA_BOOTSTRAP_ADMIN_USERNAME || "admin"
+    process.env.HEXA_ADMIN_INITIAL_USERNAME ||
+    process.env.HEXA_BOOTSTRAP_ADMIN_USERNAME ||
+    "admin"
   ).trim();
   const displayName = (
-    process.env.HEXA_BOOTSTRAP_ADMIN_DISPLAY_NAME || "HEXA Lab Administrator"
+    process.env.HEXA_ADMIN_INITIAL_DISPLAY_NAME ||
+    process.env.HEXA_BOOTSTRAP_ADMIN_DISPLAY_NAME ||
+    "HEXA Lab Administrator"
   ).trim();
 
-  if (
-    process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD &&
-    process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD.trim().length >= 8
-  ) {
+  const suppliedPassword = (
+    process.env.HEXA_ADMIN_INITIAL_PASSWORD ||
+    process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD ||
+    ""
+  ).trim();
+
+  if (suppliedPassword) {
+    const pwCheck = validatePasswordStrength(suppliedPassword);
+    if (!pwCheck.valid) {
+      throw new Error(
+        `HEXA_ADMIN_INITIAL_PASSWORD validation failed: ${pwCheck.error}`
+      );
+    }
     return {
       username,
-      password: process.env.HEXA_BOOTSTRAP_ADMIN_PASSWORD.trim(),
+      password: suppliedPassword,
       displayName,
     };
   }
 
-  const secretFile = getSafeFilePath(".bootstrap_admin.secret");
-  if (fs.existsSync(secretFile)) {
-    const stored = fs.readFileSync(secretFile, "utf8").trim();
-    if (stored.length >= 8) {
-      return { username, password: stored, displayName };
-    }
-  }
-
   if (process.env.NODE_ENV === "production") {
-    return null;
+    throw new Error(
+      "Initial Admin provisioning requires HEXA_ADMIN_INITIAL_PASSWORD in production environment."
+    );
   }
 
-  const generatedPassword = `Hexa!${crypto.randomBytes(12).toString("base64url")}`;
-  fs.writeFileSync(secretFile, generatedPassword, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  console.warn(
-    "[AuthBootstrap] Generated instance-local bootstrap admin secret in .bootstrap_admin.secret (0600)."
-  );
-  return { username, password: generatedPassword, displayName };
+  return {
+    username,
+    password: DEFAULT_DEV_ADMIN_PASSWORD,
+    displayName,
+  };
 }
 
 /**
- * Creates the first administrator if and only if no administrator exists yet.
- * Never overwrites existing administrators.
+ * Creates the initial administrator if and only if no administrator exists yet.
+ * Once an administrator account exists, subsequent startups never recreate or overwrite it.
  */
 export function ensureBootstrapAdmin(): void {
   const existingUsers = loadUsersRaw();
-  const adminIdx = existingUsers.findIndex((u) => u.role === "Admin");
-  if (adminIdx !== -1) {
-    // If existing bootstrap admin still uses a pre-migration legacy hash and matches
-    // the local bootstrap credential, transparently upgrade the hash format in place
-    // without losing the user record or forcing a password reset.
-    const existingAdmin = existingUsers[adminIdx];
-    if (needsPasswordRehash(existingAdmin.passwordHash)) {
-      const creds = resolveBootstrapAdminCredentials();
-      if (creds && verifyPassword(creds.password, existingAdmin.passwordHash)) {
-        existingUsers[adminIdx] = {
-          ...existingAdmin,
-          passwordHash: hashPassword(creds.password),
-        };
-        saveUsersRaw(existingUsers);
-      }
-    }
+  const hasAdmin = existingUsers.some((u) => u.role === "Admin");
+  if (hasAdmin) {
     return;
   }
 
-  const creds = resolveBootstrapAdminCredentials();
-  if (!creds) {
-    return;
-  }
+  const creds = resolveInitialAdminCredentials();
 
   if (!USERNAME_REGEX.test(creds.username)) {
     throw new Error("Invalid bootstrap administrator username format.");
   }
+
+  // Hash the supplied password immediately using canonical scrypt implementation
+  const passwordHash = hashPassword(creds.password);
 
   const newAdmin: StoredUserRecord = {
     id: `usr_${crypto.randomBytes(8).toString("hex")}`,
@@ -220,7 +218,7 @@ export function ensureBootstrapAdmin(): void {
     displayName: creds.displayName,
     role: "Admin",
     active: true,
-    passwordHash: hashPassword(creds.password),
+    passwordHash,
     createdAt: new Date().toISOString(),
     lastLoginAt: null,
   };
